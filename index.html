@@ -1783,15 +1783,23 @@ function driveInitGIS() {
   }
   const client = google.accounts.oauth2.initTokenClient({
     client_id: driveState.clientId,
-    scope: DRIVE_SCOPE,
+    scope: DRIVE_SCOPE + ' https://www.googleapis.com/auth/userinfo.email',
     callback: (resp) => {
-      if (resp.error) { setDriveStatus('error'); driveLog('Erro ao autenticar: ' + resp.error, 'var(--red)'); return; }
+      if (resp.error) {
+        setDriveStatus('error');
+        const msg = resp.error === 'access_denied' ? 'Acesso negado pelo usuário.' :
+          resp.error === 'invalid_client' ? 'Client ID inválido. Verifique o Google Cloud Console.' :
+          'Erro: ' + resp.error;
+        alert(msg);
+        driveLog(msg, 'var(--red)');
+        return;
+      }
       driveState.accessToken = resp.access_token;
       driveAfterAuth();
     },
   });
   driveState._client = client;
-  client.requestAccessToken();
+  client.requestAccessToken({ prompt: 'consent' });
 }
 
 async function driveAfterAuth() {
@@ -1960,29 +1968,27 @@ function save() {
   }
 }
 
-// Restaurar conexão ao abrir (se já tinha client ID salvo e token ainda válido)
+// Restaurar conexão ao abrir (se já tinha client ID salvo)
 function driveRestoreSession() {
   if (!driveState.clientId) return;
-  setDriveStatus('');
-  // Tenta silenciosamente reautenticar sem popup
   if (typeof google === 'undefined' || !google.accounts) {
     setTimeout(driveRestoreSession, 1000); return;
   }
   const client = google.accounts.oauth2.initTokenClient({
     client_id: driveState.clientId,
-    scope: DRIVE_SCOPE,
+    scope: DRIVE_SCOPE + ' https://www.googleapis.com/auth/userinfo.email',
     prompt: '',
+    hint: driveState.email || '',
     callback: (resp) => {
       if (resp.error || !resp.access_token) return;
       driveState.accessToken = resp.access_token;
       driveState.connected = true;
       setDriveStatus('connected');
       startAutoSync();
-      driveLog && driveLog('Sessão restaurada automaticamente.', 'var(--green)');
     },
   });
   driveState._client = client;
-  client.requestAccessToken({ prompt: '' });
+  try { client.requestAccessToken({ prompt: '' }); } catch(e) {}
 }
 
 // INIT
